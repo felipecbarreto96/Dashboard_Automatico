@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard de Vendas</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f5f3ee; --surface: #ffffff; --border: rgba(0,0,0,0.08);
+      --text: #1a1917; --muted: #7a7870;
+      --blue: #1a5cff; --green: #0d9e6e; --red: #c94040; --purple: #6c5ce7; --amber: #c47a1e;
+      --radius: 14px;
+    }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2.5rem 2rem 4rem; }
+
+    #loading {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 60vh; gap: 1rem; color: var(--muted); font-size: 14px;
+    }
+    .spinner {
+      width: 32px; height: 32px; border: 2px solid var(--border);
+      border-top-color: var(--blue); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #erro {
+      display: none; background: #fdecea; border: 1px solid #f5c1c1;
+      border-radius: var(--radius); padding: 1.5rem; color: #a32020;
+      font-size: 14px; line-height: 1.6; margin-bottom: 1rem;
+    }
+    #erro code {
+      display: block; margin-top: 8px; font-size: 12px;
+      background: rgba(0,0,0,0.05); padding: 8px 12px;
+      border-radius: 6px; color: #666; word-break: break-all;
+    }
+
+    #dashboard { display: none; }
+
+    header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 2.5rem; flex-wrap: wrap; gap: 1rem; }
+    header h1 { font-family: 'DM Serif Display', serif; font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
+    header h1 span { color: var(--muted); font-size: 0.6em; display: block; font-family: 'DM Sans', sans-serif; font-weight: 300; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+
+    .badges { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .badge { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0.04em; }
+    .badge-live { background: #e6f9f3; border-color: #9fe1cb; color: #0d6e4c; display: flex; align-items: center; gap: 6px; }
+    .badge-live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #0d9e6e; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 2rem; }
+    .kpi { background: var(--surface); border-radius: var(--radius); padding: 1.25rem 1.4rem; border: 1px solid var(--border); position: relative; overflow: hidden; animation: fadeUp 0.5s ease both; }
+    .kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--kpi-color, var(--blue)); border-radius: var(--radius) var(--radius) 0 0; }
+    .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 500; margin-bottom: 10px; }
+    .kpi-value { font-family: 'DM Serif Display', serif; font-size: 2.1rem; line-height: 1; margin-bottom: 4px; letter-spacing: -0.02em; }
+    .kpi-sub { font-size: 12px; color: var(--muted); }
+
+    .charts-main { margin-bottom: 1.25rem; }
+    .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem; }
+    @media (max-width: 640px) { .charts-row { grid-template-columns: 1fr; } }
+
+    .card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 1.4rem; animation: fadeUp 0.6s ease both; }
+    .card-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 500; margin-bottom: 1rem; }
+    .chart-wrap { position: relative; width: 100%; }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 500; padding: 0 0 10px; border-bottom: 1px solid var(--border); }
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody td { padding: 10px 0; }
+    tbody td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+    .pill-up { background: #e6f9f3; color: #0d6e4c; }
+    .pill-down { background: #fdecea; color: #a32020; }
+
+    .update-note { margin-top: 3rem; text-align: center; font-size: 11px; color: var(--muted); }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <p>Conectando ao Google Sheets...</p>
+  </div>
+
+  <div id="erro">
+    <strong>Não foi possível carregar os dados da planilha.</strong><br>
+    Verifique se a planilha está publicada como CSV em <b>Arquivo → Compartilhar → Publicar na web</b>.
+    <code id="erro-url"></code>
+  </div>
+
+  <div id="dashboard">
+
+    <header>
+      <h1><span>Relatório Comercial</span>Dashboard de Vendas</h1>
+      <div class="badges">
+        <span class="badge-live badge">Google Sheets</span>
+        <span class="badge" id="badge-registros">— registros</span>
+      </div>
+    </header>
+
+    <div class="kpi-grid">
+      <div class="kpi" style="--kpi-color:#1a5cff;">
+        <p class="kpi-label">Receita Total</p>
+        <p class="kpi-value" id="kpi-receita">—</p>
+        <p class="kpi-sub">soma do período</p>
+      </div>
+      <div class="kpi" style="--kpi-color:#0d9e6e;">
+        <p class="kpi-label">Total de Pedidos</p>
+        <p class="kpi-value" id="kpi-pedidos">—</p>
+        <p class="kpi-sub">soma do período</p>
+      </div>
+      <div class="kpi" style="--kpi-color:#6c5ce7;">
+        <p class="kpi-label">Melhor mês</p>
+        <p class="kpi-value" id="kpi-melhor">—</p>
+        <p class="kpi-sub" id="kpi-melhor-sub">em receita</p>
+      </div>
+      <div class="kpi" style="--kpi-color:#c94040;">
+        <p class="kpi-label">Ticket Médio</p>
+        <p class="kpi-value" id="kpi-ticket">—</p>
+        <p class="kpi-sub">receita ÷ pedidos</p>
+      </div>
+    </div>
+
+    <div class="charts-main">
+      <div class="card">
+        <p class="card-title">Receita & Pedidos — evolução mensal</p>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-dot" style="background:#1a5cff;"></span>Receita (R$ mil)</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#0d9e6e;"></span>Pedidos</span>
+        </div>
+        <div class="chart-wrap" style="height:260px;">
+          <canvas id="mainChart" role="img" aria-label="Receita e pedidos mensais"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="card">
+        <p class="card-title">Receita por mês (R$ mil)</p>
+        <div class="chart-wrap" style="height:220px;">
+          <canvas id="barChart" role="img" aria-label="Receita por mês"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <p class="card-title">Desempenho mensal</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Mês</th><th>Receita</th><th>Pedidos</th><th>vs. anterior</th></tr>
+            </thead>
+            <tbody id="tabela-corpo"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <p class="update-note" id="update-note"></p>
+
+  </div>
+
+  <script>
+    /* ================================================================
+       COLE AQUI O LINK CSV DA SUA PLANILHA GOOGLE SHEETS
+    ================================================================ */
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRFIYK8EQ8QPkjrPrMOT8-9SKRmt4c0C2_4D4_VUb1qvjNHFjrC4sYmoMSTVL1Z2dO8Xg1dT0Ur2GLQ/pub?output=csv';
+
+    /* ================================================================
+       Abaixo: lógica do dashboard. Não precisa editar.
+    ================================================================ */
+
+    function parseCSV(text) {
+      const lines = text.trim().split('\n');
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\r/g,''));
+      return lines.slice(1).map(line => {
+        const vals = line.split(',').map(v => v.trim().replace(/\r/g,''));
+        const obj = {};
+        headers.forEach((h, i) => obj[h] = vals[i]);
+        return obj;
+      }).filter(row => row[headers[0]]);
+    }
+
+    function fmt(n) {
+      return 'R$ ' + Number(n).toLocaleString('pt-BR');
+    }
+
+    function renderDashboard(rows) {
+      const meses   = rows.map(r => r.mes);
+      const receita = rows.map(r => parseFloat(r.receita) || 0);
+      const pedidos = rows.map(r => parseFloat(r.pedidos) || 0);
+
+      const totalReceita = receita.reduce((a,b) => a+b, 0);
+      const totalPedidos = pedidos.reduce((a,b) => a+b, 0);
+      const melhorIdx    = receita.indexOf(Math.max(...receita));
+      const ticket       = totalPedidos > 0 ? (totalReceita / totalPedidos) : 0;
+
+      document.getElementById('kpi-receita').textContent  = fmt(totalReceita);
+      document.getElementById('kpi-pedidos').textContent  = totalPedidos.toLocaleString('pt-BR');
+      document.getElementById('kpi-melhor').textContent   = meses[melhorIdx] || '—';
+      document.getElementById('kpi-melhor-sub').textContent = fmt(receita[melhorIdx]) + ' em receita';
+      document.getElementById('kpi-ticket').textContent   = fmt(Math.round(ticket));
+      document.getElementById('badge-registros').textContent = rows.length + ' meses';
+
+      const CORES = ['#1a5cff','#0d9e6e','#6c5ce7','#c94040','#c47a1e'];
+
+      new Chart(document.getElementById('mainChart'), {
+        type: 'bar',
+        data: {
+          labels: meses,
+          datasets: [
+            { label: 'Receita', data: receita, backgroundColor: '#1a5cff', borderRadius: 5, yAxisID: 'y' },
+            { label: 'Pedidos', data: pedidos, type: 'line', borderColor: '#0d9e6e', backgroundColor: 'rgba(13,158,110,0.08)', pointBackgroundColor: '#0d9e6e', pointRadius: 5, tension: 0.4, fill: true, yAxisID: 'y2' }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y:  { position: 'left',  ticks: { callback: v => 'R$'+v, font:{size:11}, color:'#7a7870' }, grid: { color:'rgba(0,0,0,0.05)' } },
+            y2: { position: 'right', ticks: { font:{size:11}, color:'#0d9e6e' }, grid: { display:false } },
+            x:  { ticks: { font:{size:12}, color:'#7a7870' }, grid: { display:false } }
+          }
+        }
+      });
+
+      new Chart(document.getElementById('barChart'), {
+        type: 'bar',
+        data: {
+          labels: meses,
+          datasets: [{ data: receita, backgroundColor: CORES[0], borderRadius: 5 }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { ticks: { callback: v => 'R$'+v, font:{size:11}, color:'#7a7870' }, grid: { color:'rgba(0,0,0,0.05)' } },
+            x: { ticks: { font:{size:12}, color:'#7a7870' }, grid: { display:false } }
+          }
+        }
+      });
+
+      const tbody = document.getElementById('tabela-corpo');
+      rows.forEach((row, i) => {
+        const rec = parseFloat(row.receita) || 0;
+        const ant = i > 0 ? (parseFloat(rows[i-1].receita) || 0) : null;
+        let deltaHtml = '—';
+        if (ant !== null && ant > 0) {
+          const pct = ((rec - ant) / ant * 100).toFixed(1);
+          const cls = pct >= 0 ? 'pill-up' : 'pill-down';
+          const sinal = pct >= 0 ? '▲' : '▼';
+          deltaHtml = `<span class="pill ${cls}">${sinal} ${Math.abs(pct)}%</span>`;
+        }
+        tbody.innerHTML += `
+          <tr>
+            <td>${row.mes}</td>
+            <td>${fmt(rec)}</td>
+            <td>${(parseFloat(row.pedidos)||0).toLocaleString('pt-BR')}</td>
+            <td>${deltaHtml}</td>
+          </tr>`;
+      });
+
+      const agora = new Date().toLocaleString('pt-BR');
+      document.getElementById('update-note').textContent = `Dados carregados do Google Sheets · ${agora}`;
+
+      document.getElementById('loading').style.display   = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+    }
+
+    function mostrarErro() {
+      document.getElementById('loading').style.display  = 'none';
+      document.getElementById('erro').style.display     = 'block';
+      document.getElementById('erro-url').textContent   = CSV_URL;
+    }
+
+    fetch(CSV_URL)
+      .then(res => { if (!res.ok) throw new Error('HTTP '+res.status); return res.text(); })
+      .then(text => {
+        const rows = parseCSV(text);
+        if (!rows.length) throw new Error('Planilha vazia');
+        renderDashboard(rows);
+      })
+      .catch(err => {
+        console.error(err);
+        mostrarErro();
+      });
+  </script>
+
+</body>
+</html>
